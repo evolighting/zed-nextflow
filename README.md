@@ -127,6 +127,24 @@ source change, run `zed: rebuild dev extension`, followed by
 `editor: restart language server`. With an SSH project, the process and cache
 are on the remote host, while the logs viewer remains in the local Zed UI.
 
+### Zed SSH session limitation
+
+Zed currently has open upstream issues where extension-provided language
+servers are not rebound to restored buffers after an SSH reconnect or an
+extension upload. A characteristic log sequence is a language-server start
+immediately followed by another `Loaded language server` entry, after which the
+server process disappears and the LSP logs remain empty:
+
+- [zed-industries/zed#31468](https://github.com/zed-industries/zed/issues/31468)
+- [zed-industries/zed#60328](https://github.com/zed-industries/zed/issues/60328)
+
+This occurs before the extension's language-server callback can run and cannot
+currently be repaired by the extension itself. Wait for `Finished uploading
+extension nextflow`, then close all restored Nextflow buffers and explicitly
+open a different `.nf` file. If the remote workspace remains stale, create a
+fresh remote project window rooted at the pipeline repository rather than
+reconnecting to the restored window.
+
 ## Custom language-server command
 
 The `binary` setting replaces the entire automatically managed Java/JAR
