@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Keep this file LF-only: it is embedded in the extension and passed to bash -c.
 set -euo pipefail
 
 readonly repository="nextflow-io/language-server"

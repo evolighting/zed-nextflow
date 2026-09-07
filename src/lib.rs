@@ -73,13 +73,17 @@ impl NextflowExtension {
             &zed::LanguageServerInstallationStatus::CheckingForUpdate,
         );
 
+        // A Windows Git checkout may turn the embedded script into CRLF even though it
+        // executes on a Unix SSH host. Bash would then read `pipefail\r` as the option.
+        let cache_manager_script = CACHE_MANAGER_SCRIPT.replace("\r\n", "\n");
+
         // Keep this command name in sync with the process:exec capability in extension.toml.
         // Passing the path returned by worktree.which() would turn this into e.g.
         // /usr/bin/bash, which is a different capability command.
         let output = process::Command::new(CACHE_MANAGER_COMMAND)
             .args([
                 "-c",
-                CACHE_MANAGER_SCRIPT,
+                cache_manager_script.as_str(),
                 "nextflow-lsp-cache",
                 "resolve",
                 &language_version,
