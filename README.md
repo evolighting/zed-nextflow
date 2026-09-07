@@ -103,10 +103,29 @@ Tree-sitter highlights:
 }
 ```
 
-The extension supplies sensible workspace defaults when no `settings` object
-is configured. A user-provided object is forwarded unchanged to
-`workspace/didChangeConfiguration`. `nextflow.languageVersion` also selects
-the shared cache subdirectory and must use a `YY.MM` value.
+The extension supplies the same sensible workspace defaults as the VS Code
+extension. User-provided values are recursively merged over those defaults and
+the result is sent through `workspace/didChangeConfiguration`.
+`nextflow.languageVersion` also selects the shared cache subdirectory and must
+use a `YY.MM` value.
+
+## Verify the language server
+
+Open an `.nf` file and confirm that the language selector shows `Nextflow`.
+Then enter this snippet and request completion after the dot:
+
+```nextflow
+workflow {
+    log.
+}
+```
+
+The official language server should offer `info`, `error`, and `warn`. Use
+`dev: open language server logs` to inspect `Nextflow Language Server`; its
+Server Info should show the selected Java executable and cached JAR. After a
+source change, run `zed: rebuild dev extension`, followed by
+`editor: restart language server`. With an SSH project, the process and cache
+are on the remote host, while the logs viewer remains in the local Zed UI.
 
 ## Custom language-server command
 

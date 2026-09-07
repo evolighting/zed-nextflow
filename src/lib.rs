@@ -7,6 +7,51 @@ const CACHE_MANAGER_SCRIPT: &str = include_str!("../scripts/nextflow-lsp-cache")
 
 struct NextflowExtension;
 
+fn default_workspace_configuration() -> zed::serde_json::Value {
+    zed::serde_json::json!({
+        "nextflow": {
+            "languageVersion": DEFAULT_LANGUAGE_VERSION,
+            "completion": {
+                "extended": false,
+                "maxItems": 100
+            },
+            "debug": false,
+            "errorReportingMode": "warnings",
+            "files": {
+                "exclude": [
+                    ".git",
+                    ".lineage",
+                    ".nf-test",
+                    ".pixi",
+                    ".venv",
+                    "work"
+                ]
+            },
+            "formatting": {
+                "harshilAlignment": false,
+                "maheshForm": false,
+                "sortDeclarations": false
+            }
+        }
+    })
+}
+
+fn merge_configuration(defaults: &mut zed::serde_json::Value, overrides: zed::serde_json::Value) {
+    match (defaults, overrides) {
+        (zed::serde_json::Value::Object(defaults), zed::serde_json::Value::Object(overrides)) => {
+            for (key, value) in overrides {
+                match defaults.get_mut(&key) {
+                    Some(default) => merge_configuration(default, value),
+                    None => {
+                        defaults.insert(key, value);
+                    }
+                }
+            }
+        }
+        (default, override_value) => *default = override_value,
+    }
+}
+
 impl NextflowExtension {
     fn configured_command(worktree: &zed::Worktree) -> zed::Result<Option<zed::Command>> {
         let Some(binary) = LspSettings::for_worktree(LANGUAGE_SERVER_ID, worktree)?.binary else {
@@ -157,34 +202,65 @@ impl zed::Extension for NextflowExtension {
         worktree: &zed::Worktree,
     ) -> zed::Result<Option<zed::serde_json::Value>> {
         let settings = LspSettings::for_worktree(language_server_id.as_ref(), worktree)?.settings;
-        Ok(Some(settings.unwrap_or_else(|| {
+        let mut configuration = default_workspace_configuration();
+        if let Some(settings) = settings {
+            if !settings.is_object() {
+                return Err(format!(
+                    "lsp.{LANGUAGE_SERVER_ID}.settings must be a JSON object"
+                ));
+            }
+            merge_configuration(&mut configuration, settings);
+        }
+        Ok(Some(configuration))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_settings_are_merged_with_workspace_defaults() {
+        let mut configuration = default_workspace_configuration();
+        merge_configuration(
+            &mut configuration,
             zed::serde_json::json!({
                 "nextflow": {
-                    "languageVersion": DEFAULT_LANGUAGE_VERSION,
+                    "languageVersion": "25.10",
                     "completion": {
-                        "extended": false,
-                        "maxItems": 100
-                    },
-                    "debug": false,
-                    "errorReportingMode": "warnings",
-                    "files": {
-                        "exclude": [
-                            ".git",
-                            ".lineage",
-                            ".nf-test",
-                            ".pixi",
-                            ".venv",
-                            "work"
-                        ]
-                    },
-                    "formatting": {
-                        "harshilAlignment": false,
-                        "maheshForm": false,
-                        "sortDeclarations": false
+                        "extended": true
                     }
                 }
-            })
-        })))
+            }),
+        );
+
+        assert_eq!(configuration["nextflow"]["languageVersion"], "25.10");
+        assert_eq!(configuration["nextflow"]["completion"]["extended"], true);
+        assert_eq!(configuration["nextflow"]["completion"]["maxItems"], 100);
+        assert_eq!(
+            configuration["nextflow"]["files"]["exclude"],
+            zed::serde_json::json!([".git", ".lineage", ".nf-test", ".pixi", ".venv", "work"])
+        );
+    }
+
+    #[test]
+    fn user_arrays_replace_default_arrays() {
+        let mut configuration = default_workspace_configuration();
+        merge_configuration(
+            &mut configuration,
+            zed::serde_json::json!({
+                "nextflow": {
+                    "files": {
+                        "exclude": ["build"]
+                    }
+                }
+            }),
+        );
+
+        assert_eq!(
+            configuration["nextflow"]["files"]["exclude"],
+            zed::serde_json::json!(["build"])
+        );
     }
 }
 
