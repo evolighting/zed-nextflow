@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly repository="nextflow-io/language-server"
+readonly asset_name="language-server-all.jar"
+readonly action="${1:-check}"
+readonly language_version="${2:-${NEXTFLOW_LANGUAGE_VERSION:-26.04}}"
+readonly cache_root="${NEXTFLOW_LSP_CACHE_DIR:-${HOME:?HOME is not set}/.nextflow/lsp}"
+
+if [[ ! "$language_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    printf 'Invalid language version: %s (expected e.g. 26.04)\n' "$language_version" >&2
+    exit 2
+fi
+
+readonly version_prefix="v${language_version}"
+readonly cache_dir="${cache_root}/${version_prefix}"
+
+latest_local() {
+    local path name version patch patch_number
+    local best_path=""
+    local best_patch=-1
+
+    shopt -s nullglob
+    for path in "${cache_dir}/${version_prefix}."*.jar; do
+        [[ -f "$path" ]] || continue
+        name="${path##*/}"
+        version="${name%.jar}"
+        patch="${version##*.}"
+        [[ "$patch" =~ ^[0-9]+$ ]] || continue
+        patch_number=$((10#$patch))
+        if ((patch_number > best_patch)); then
+            best_patch=$patch_number
+            best_path="$path"
+        fi
+    done
+    shopt -u nullglob
+
+    [[ -n "$best_path" ]] && printf '%s\n' "$best_path"
+}
+
+latest_remote() {
+    local response tag patch patch_number
+    local best_tag=""
+    local best_patch=-1
+    local -a curl_args=(
+        --fail --silent --show-error --location
+        --header "Accept: application/vnd.github+json"
+        --header "X-GitHub-Api-Version: 2022-11-28"
+    )
+
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        curl_args+=(--header "Authorization: Bearer ${GITHUB_TOKEN}")
+    fi
+
+    response="$(curl "${curl_args[@]}" \
+        "https://api.github.com/repos/${repository}/releases?per_page=100")" || return 1
+
+    while IFS= read -r tag; do
+        [[ "$tag" =~ ^${version_prefix}\.([0-9]+)$ ]] || continue
+        patch="${BASH_REMATCH[1]}"
+        patch_number=$((10#$patch))
+        if ((patch_number > best_patch)); then
+            best_patch=$patch_number
+            best_tag="$tag"
+        fi
+    done < <(
+        printf '%s\n' "$response" |
+            sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p'
+    )
+
+    [[ -n "$best_tag" ]] && printf '%s\n' "$best_tag"
+}
+
+download_version() {
+    local version="$1"
+    local target="${cache_dir}/${version}.jar"
+    local temporary="${target}.part.$$"
+    local magic
+
+    if [[ -f "$target" ]]; then
+        printf '%s\n' "$target"
+        return
+    fi
+
+    mkdir -p "$cache_dir"
+    trap 'rm -f "$temporary"' EXIT INT TERM
+    curl --fail --show-error --location --retry 2 \
+        --output "$temporary" \
+        "https://github.com/${repository}/releases/download/${version}/${asset_name}"
+
+    magic="$(od -An -tx1 -N4 "$temporary" | tr -d '[:space:]')"
+    case "$magic" in
+        504b0304|504b0506|504b0708) ;;
+        *)
+            printf 'Downloaded file is not a valid JAR: %s\n' "$temporary" >&2
+            exit 1
+            ;;
+    esac
+
+    mv -f "$temporary" "$target"
+    trap - EXIT INT TERM
+    printf '%s\n' "$target"
+}
+
+case "$action" in
+    check)
+        local_path="$(latest_local || true)"
+        remote_version="$(latest_remote || true)"
+        printf 'Cache directory: %s\n' "$cache_dir"
+        printf 'Local version:   %s\n' "${local_path##*/}"
+        printf 'Remote version:  %s\n' "${remote_version:-unavailable}"
+        if [[ -n "$local_path" && "${local_path##*/}" == "${remote_version}.jar" ]]; then
+            printf 'Status:          up to date\n'
+        elif [[ -n "$remote_version" ]]; then
+            printf 'Status:          update available\n'
+        elif [[ -n "$local_path" ]]; then
+            printf 'Status:          using local cache (remote check failed)\n'
+        else
+            printf 'Status:          no cached language server\n'
+        fi
+        ;;
+    update)
+        remote_version="$(latest_remote)" || {
+            printf 'Unable to determine the latest %s language-server release.\n' "$version_prefix" >&2
+            exit 1
+        }
+        previous="$(latest_local || true)"
+        resolved="$(download_version "$remote_version")"
+        if [[ "$resolved" == "$previous" ]]; then
+            printf 'Already up to date: %s\n' "$resolved"
+        else
+            printf 'Updated Nextflow language server: %s\n' "$resolved"
+        fi
+        ;;
+    resolve)
+        resolved="$(latest_local || true)"
+        if [[ -z "$resolved" ]]; then
+            remote_version="$(latest_remote)" || {
+                printf 'No cached JAR and unable to query GitHub for %s.\n' "$version_prefix" >&2
+                exit 1
+            }
+            resolved="$(download_version "$remote_version")"
+        fi
+        printf '%s\n' "$resolved"
+        ;;
+    *)
+        printf 'Usage: nextflow-lsp-cache {check|update|resolve} [language-version]\n' >&2
+        exit 2
+        ;;
+esac

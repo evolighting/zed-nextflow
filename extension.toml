@@ -1,0 +1,21 @@
+id = "nextflow"
+name = "Nextflow"
+version = "0.1.1"
+schema_version = 1
+authors = ["Nextflow contributors"]
+description = "Nextflow language support with Tree-sitter syntax highlighting and the official language server."
+repository = "https://github.com/nextflow-io/zed-nextflow"
+
+[grammars.nextflow]
+repository = "https://github.com/nextflow-io/tree-sitter-nextflow"
+rev = "69a72c6cf4e90609b8558fc05d7d17a5f3df7894"
+
+[language_servers.nextflow-language-server]
+name = "Nextflow Language Server"
+languages = ["Nextflow", "Nextflow Config"]
+language_ids = { "Nextflow" = "nextflow", "Nextflow Config" = "nextflow-config" }
+
+[[capabilities]]
+kind = "process:exec"
+command = "bash"
+args = ["**"]
