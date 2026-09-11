@@ -1,9 +1,13 @@
-use zed_extension_api::{self as zed, process, settings::LspSettings};
+use std::fs;
+
+use zed_extension_api::{self as zed, Os, current_platform, process, settings::LspSettings};
 
 const LANGUAGE_SERVER_ID: &str = "nextflow-language-server";
 const DEFAULT_LANGUAGE_VERSION: &str = "26.04";
-const CACHE_MANAGER_COMMAND: &str = "bash";
-const CACHE_MANAGER_SCRIPT: &str = include_str!("../scripts/nextflow-lsp-cache");
+const UNIX_CACHE_MANAGER_PATH: &str = "nextflow-lsp-cache";
+const UNIX_CACHE_MANAGER_SCRIPT: &str = include_str!("../scripts/nextflow-lsp-cache");
+const WINDOWS_CACHE_MANAGER_PATH: &str = "nextflow-lsp-cache.ps1";
+const WINDOWS_CACHE_MANAGER_SCRIPT: &str = include_str!("../scripts/nextflow-lsp-cache.ps1");
 
 struct NextflowExtension;
 
@@ -53,6 +57,61 @@ fn merge_configuration(defaults: &mut zed::serde_json::Value, overrides: zed::se
 }
 
 impl NextflowExtension {
+    fn install_cache_manager(path: &str, contents: &str) -> zed::Result<()> {
+        if fs::read(path).ok().as_deref() == Some(contents.as_bytes()) {
+            return Ok(());
+        }
+        fs::write(path, contents)
+            .map_err(|error| format!("failed to install cache manager {path}: {error}"))
+    }
+
+    fn windows_powershell(worktree: &zed::Worktree) -> zed::Result<&'static str> {
+        // Use a stable command name rather than the absolute path returned by
+        // which(), because process capabilities match the command string.
+        ["pwsh", "pwsh.exe", "powershell", "powershell.exe"]
+            .into_iter()
+            .find(|command| worktree.which(command).is_some())
+            .ok_or_else(|| {
+                "PowerShell is required to manage the shared Nextflow language-server cache on Windows. Install PowerShell 7 (pwsh) or make Windows PowerShell (powershell.exe) available on PATH.".to_string()
+            })
+    }
+
+    fn cache_manager_command(
+        worktree: &zed::Worktree,
+        language_version: &str,
+    ) -> zed::Result<process::Command> {
+        match current_platform().0 {
+            Os::Windows => {
+                Self::install_cache_manager(
+                    WINDOWS_CACHE_MANAGER_PATH,
+                    WINDOWS_CACHE_MANAGER_SCRIPT,
+                )?;
+                let command = Self::windows_powershell(worktree)?;
+                Ok(process::Command::new(command)
+                    .args([
+                        "-NoLogo",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-File",
+                        WINDOWS_CACHE_MANAGER_PATH,
+                        "resolve",
+                        language_version,
+                    ])
+                    .envs(worktree.shell_env()))
+            }
+            Os::Linux | Os::Mac => {
+                // Normalize CRLF before an embedded script reaches a Unix shell.
+                let script = UNIX_CACHE_MANAGER_SCRIPT.replace("\r\n", "\n");
+                Self::install_cache_manager(UNIX_CACHE_MANAGER_PATH, &script)?;
+                Ok(process::Command::new("bash")
+                    .args([UNIX_CACHE_MANAGER_PATH, "resolve", language_version])
+                    .envs(worktree.shell_env()))
+            }
+        }
+    }
+
     fn configured_command(worktree: &zed::Worktree) -> zed::Result<Option<zed::Command>> {
         let Some(binary) = LspSettings::for_worktree(LANGUAGE_SERVER_ID, worktree)?.binary else {
             return Ok(None);
@@ -118,22 +177,7 @@ impl NextflowExtension {
             &zed::LanguageServerInstallationStatus::CheckingForUpdate,
         );
 
-        // A Windows Git checkout may turn the embedded script into CRLF even though it
-        // executes on a Unix SSH host. Bash would then read `pipefail\r` as the option.
-        let cache_manager_script = CACHE_MANAGER_SCRIPT.replace("\r\n", "\n");
-
-        // Keep this command name in sync with the process:exec capability in extension.toml.
-        // Passing the path returned by worktree.which() would turn this into e.g.
-        // /usr/bin/bash, which is a different capability command.
-        let output = process::Command::new(CACHE_MANAGER_COMMAND)
-            .args([
-                "-c",
-                cache_manager_script.as_str(),
-                "nextflow-lsp-cache",
-                "resolve",
-                &language_version,
-            ])
-            .envs(worktree.shell_env())
+        let output = Self::cache_manager_command(worktree, &language_version)?
             .output()
             .map_err(|error| format!("failed to resolve the Nextflow language server: {error}"))?;
 

@@ -36,9 +36,12 @@ filename convention as the official VS Code extension. If the cache is empty,
 the first LSP startup downloads the newest matching stable release. Existing
 cached JARs are never deleted, so VS Code and Zed can safely reuse them.
 
-The cache operations run in the worktree shell environment. In an SSH project,
-the cache, Java executable, and network access are therefore on the remote
-host.
+The cache operations run in the worktree environment. The extension uses
+PowerShell (`pwsh` or Windows PowerShell) on Windows and Bash on Linux/macOS.
+Both implementations first reuse the greatest matching patch JAR already in
+the VS Code-compatible cache; only an empty cache triggers a GitHub query and
+download. In an SSH project, platform detection, the cache, Java executable,
+and network access are all on the remote host.
 
 ## Check or update the shared LSP cache
 
@@ -48,6 +51,14 @@ The bundled command supports `check`, `update`, and `resolve`:
 ./scripts/nextflow-lsp-cache check 26.04
 ./scripts/nextflow-lsp-cache update 26.04
 ./scripts/nextflow-lsp-cache resolve 26.04
+```
+
+On Windows PowerShell:
+
+```powershell
+.\scripts\nextflow-lsp-cache.ps1 check 26.04
+.\scripts\nextflow-lsp-cache.ps1 update 26.04
+.\scripts\nextflow-lsp-cache.ps1 resolve 26.04
 ```
 
 To make it available from any directory on a development machine:
@@ -185,6 +196,9 @@ cargo check --target wasm32-wasip2
 bash -n scripts/nextflow-lsp-cache
 scripts/nextflow-lsp-cache check 26.04
 ```
+
+On Windows, run `.\scripts\nextflow-lsp-cache.ps1 check 26.04` from
+PowerShell to validate the platform-specific cache manager.
 
 Query files can be checked against the sibling grammar checkout used to create
 this project:

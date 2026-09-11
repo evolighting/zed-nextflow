@@ -1,6 +1,6 @@
 id = "nextflow"
 name = "Nextflow"
-version = "0.1.3"
+version = "0.1.4"
 schema_version = 1
 authors = ["Nextflow contributors"]
 description = "Nextflow language support with Tree-sitter syntax highlighting and the official language server."
@@ -18,4 +18,24 @@ language_ids = { "Nextflow" = "nextflow", "Nextflow Config" = "nextflow-config" 
 [[capabilities]]
 kind = "process:exec"
 command = "bash"
-args = ["**"]
+args = ["nextflow-lsp-cache", "resolve", "*"]
+
+[[capabilities]]
+kind = "process:exec"
+command = "pwsh"
+args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "nextflow-lsp-cache.ps1", "resolve", "*"]
+
+[[capabilities]]
+kind = "process:exec"
+command = "pwsh.exe"
+args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "nextflow-lsp-cache.ps1", "resolve", "*"]
+
+[[capabilities]]
+kind = "process:exec"
+command = "powershell"
+args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "nextflow-lsp-cache.ps1", "resolve", "*"]
+
+[[capabilities]]
+kind = "process:exec"
+command = "powershell.exe"
+args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "nextflow-lsp-cache.ps1", "resolve", "*"]
