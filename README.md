@@ -207,10 +207,10 @@ this project:
 tree-sitter query languages/nextflow/highlights.scm examples/main.nf
 ```
 
-Before publishing under a different organization, update `authors` and
-`repository` in `extension.toml`. Zed extensions are published through the
-[`zed-industries/extensions`](https://github.com/zed-industries/extensions)
-registry.
+The source repository is
+[`evolighting/zed-nextflow`](https://github.com/evolighting/zed-nextflow).
+Zed extensions are published through the
+[`zed-industries/extensions`](https://github.com/zed-industries/extensions) registry.
 
 ## Upstream projects
 

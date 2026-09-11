@@ -2,9 +2,9 @@ id = "nextflow"
 name = "Nextflow"
 version = "0.1.4"
 schema_version = 1
-authors = ["Nextflow contributors"]
+authors = ["evolighting"]
 description = "Nextflow language support with Tree-sitter syntax highlighting and the official language server."
-repository = "https://github.com/nextflow-io/zed-nextflow"
+repository = "https://github.com/evolighting/zed-nextflow"
 
 [grammars.nextflow]
 repository = "https://github.com/nextflow-io/tree-sitter-nextflow"
